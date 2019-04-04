@@ -49,19 +49,21 @@ int Servo2Pos = 0;
 
 //min i max wychylenie serv
 //1500 to srodek
-int minPos1 = 1200;
-int neutralPos1 = 1700;
-int maxPos1 = 2200;
+int minPos1 = 1350;
+int neutralPos1 = 1450;
+int maxPos1 = 1650;
 
-int minPos2 = 1100;
-int neutralPos2 = 1600;
-int maxPos2 = 2100;
+int minPos2 = 1450;
+int neutralPos2 = 1650;
+int maxPos2 = 1750;
 
 //czulosc serv
-int gyroGain = 997;
+int gyroGain = 2100;
 
 //zakres potencjometrow
-int potentioneterPosition = 300;
+int potentioneterPosition = 800;
+
+bool serialCom = false;
 
 // ================================================================
 // ===               INTERRUPT DETECTION ROUTINE                ===
@@ -79,16 +81,23 @@ void dmpDataReady() {
 // ================================================================
 
 void setup() {
+    pinMode(SERVO_POS_1,INPUT);
+    pinMode(SERVO_POS_2,INPUT);
+    Servo1Pos = map(analogRead(SERVO_POS_1),0,1023,potentioneterPosition,-potentioneterPosition);
+    Servo2Pos = map(analogRead(SERVO_POS_2),0,1023,-potentioneterPosition,potentioneterPosition);
+    motor.writeMicroseconds(neutralPos1+Servo1Pos);
+    motor2.writeMicroseconds(neutralPos2+Servo2Pos);
     motor.attach(5);
     //motor.writeMicroseconds(servoPos1);
     motor2.attach(6);
-    delay(2000);
+    //delay(2000);
     // motor2.writeMicroseconds(servoPos2);
-    motor.writeMicroseconds(minPos1);
-    motor2.writeMicroseconds(maxPos2);
+    delay(200);
+   motor.writeMicroseconds(minPos1+Servo1Pos);
+    motor2.writeMicroseconds(maxPos2+Servo2Pos);
     delay(500);
-    motor.writeMicroseconds(maxPos1);
-    motor2.writeMicroseconds(minPos2);
+    motor.writeMicroseconds(maxPos1+Servo1Pos);
+    motor2.writeMicroseconds(minPos2+Servo2Pos);
     delay(500);
     //motor.writeMicroseconds(servoPos1);   
     //motor2.writeMicroseconds(servoPos2);
@@ -103,24 +112,24 @@ void setup() {
     // initialize serial communication
     // (115200 chosen because it is required for Teapot Demo output, but it's
     // really up to you depending on your project)
-    Serial.begin(115200);
+    if(serialCom)Serial.begin(115200);
 
     // initialize device
-    Serial.println(F("Initializing I2C devices..."));
+   if(serialCom) Serial.println(F("Initializing I2C devices..."));
     mpu.initialize();
 
     // verify connection
-    Serial.println(F("Testing device connections..."));
-    Serial.println(mpu.testConnection() ? F("MPU6050 connection successful") : F("MPU6050 connection failed"));
+   if(serialCom) Serial.println(F("Testing device connections..."));
+   if(serialCom) Serial.println(mpu.testConnection() ? F("MPU6050 connection successful") : F("MPU6050 connection failed"));
 
     // wait for ready
-    Serial.println(F("\nSend any character to begin DMP programming and demo: "));
+   if(serialCom) Serial.println(F("\nSend any character to begin DMP programming and demo: "));
     //while (Serial.available() && Serial.read()); // empty buffer
     //while (!Serial.available());                 // wait for data
    // while (Serial.available() && Serial.read()); // empty buffer again
 
     // load and configure the DMP
-    Serial.println(F("Initializing DMP..."));
+   if(serialCom) Serial.println(F("Initializing DMP..."));
     devStatus = mpu.dmpInitialize();
 
     // supply your own gyro offsets here, scaled for min sensitivity
@@ -132,16 +141,16 @@ void setup() {
     // make sure it worked (returns 0 if so)
     if (devStatus == 0) {
         // turn on the DMP, now that it's ready
-        Serial.println(F("Enabling DMP..."));
+        if(serialCom)Serial.println(F("Enabling DMP..."));
         mpu.setDMPEnabled(true);
 
         // enable Arduino interrupt detection
-        Serial.println(F("Enabling interrupt detection (Arduino external interrupt 0)..."));
+        if(serialCom)Serial.println(F("Enabling interrupt detection (Arduino external interrupt 0)..."));
         attachInterrupt(0, dmpDataReady, RISING);
         mpuIntStatus = mpu.getIntStatus();
 
         // set our DMP Ready flag so the main loop() function knows it's okay to use it
-        Serial.println(F("DMP ready! Waiting for first interrupt..."));
+        if(serialCom)Serial.println(F("DMP ready! Waiting for first interrupt..."));
         dmpReady = true;
 
         // get expected DMP packet size for later comparison
@@ -151,15 +160,16 @@ void setup() {
         // 1 = initial memory load failed
         // 2 = DMP configuration updates failed
         // (if it's going to break, usually the code will be 1)
+        if(serialCom){
         Serial.print(F("DMP Initialization failed (code "));
         Serial.print(devStatus);
         Serial.println(F(")"));
+        }
     }
 
     // configure LED for output
     pinMode(LED_PIN, OUTPUT);
-    pinMode(SERVO_POS_1,INPUT);
-    pinMode(SERVO_POS_2,INPUT);
+    
 }
 
 
@@ -197,7 +207,7 @@ void loop() {
     if ((mpuIntStatus & 0x10) || fifoCount == 1024) {
         // reset so we can continue cleanly
         mpu.resetFIFO();
-        Serial.println(F("FIFO overflow!"));
+        if(serialCom)Serial.println(F("FIFO overflow!"));
 
     // otherwise, check for DMP data ready interrupt (this should happen frequently)
     } else if (mpuIntStatus & 0x02) {
@@ -214,6 +224,7 @@ void loop() {
         #ifdef OUTPUT_READABLE_QUATERNION
             // display quaternion values in easy matrix form: w x y z
             mpu.dmpGetQuaternion(&q, fifoBuffer);
+            if(serialCom){
             Serial.print("quat\t");
             Serial.print(q.w);
             Serial.print("\t");
@@ -222,23 +233,27 @@ void loop() {
             Serial.print(q.y);
             Serial.print("\t");
             Serial.println(q.z);
+            }
         #endif
 
         #ifdef OUTPUT_READABLE_EULER
             // display Euler angles in degrees
             mpu.dmpGetQuaternion(&q, fifoBuffer);
             mpu.dmpGetEuler(euler, &q);
+            if(serialCom){
             Serial.print("euler\t");
             Serial.print(euler[0] * 180/M_PI);
             Serial.print("\t");
             Serial.print(euler[1] * 180/M_PI);
             Serial.print("\t");
             Serial.println(euler[2] * 180/M_PI);
+            }
         #endif
 
         #ifdef OUTPUT_READABLE_YAWPITCHROLL
             Servo1Pos = map(analogRead(SERVO_POS_1),0,1023,potentioneterPosition,-potentioneterPosition);
             Servo2Pos = map(analogRead(SERVO_POS_2),0,1023,-potentioneterPosition,potentioneterPosition);
+                        
             gyroPos = (ypr[1] * gyroGain)*-1;
             servoPos1 = neutralPos1 - gyroPos + Servo1Pos;
             servoPos2 = neutralPos2 + gyroPos + Servo2Pos;
@@ -249,16 +264,17 @@ void loop() {
               servoPos = servoPos - (gyroPos/2);
             }
             */
-            if(servoPos1 < minPos1) servoPos1 = minPos1;
-            else if(servoPos1 > maxPos1) servoPos1 = maxPos1;
-            if(servoPos2 < minPos2) servoPos2 = minPos2;
-            else if(servoPos2 > maxPos2) servoPos2 = maxPos2;
+            if(servoPos1 < minPos1 +Servo1Pos) servoPos1 = minPos1+Servo1Pos;
+            else if(servoPos1 > maxPos1+Servo1Pos) servoPos1 = maxPos1+Servo1Pos;
+            if(servoPos2 < minPos2 +Servo2Pos) servoPos2 = minPos2+Servo2Pos;
+            else if(servoPos2 > maxPos2+Servo2Pos) servoPos2 = maxPos2+Servo2Pos;
             motor.writeMicroseconds(servoPos1);
             motor2.writeMicroseconds(servoPos2);
             // display Euler angles in degrees
             mpu.dmpGetQuaternion(&q, fifoBuffer);
             mpu.dmpGetGravity(&gravity, &q);
             mpu.dmpGetYawPitchRoll(ypr, &q, &gravity);
+            if(serialCom){
             Serial.print("ypr\t");
             Serial.print(ypr[0] * 180/M_PI);
             Serial.print("\t");
@@ -275,6 +291,7 @@ void loop() {
             Serial.print(ypr[1]*1000);
             
             Serial.print("\n");
+            }
             //if (servoPos < 0) { servoPos = servoPos * -1; }
             
         #endif
@@ -285,12 +302,14 @@ void loop() {
             mpu.dmpGetAccel(&aa, fifoBuffer);
             mpu.dmpGetGravity(&gravity, &q);
             mpu.dmpGetLinearAccel(&aaReal, &aa, &gravity);
+            if(serialCom){
             Serial.print("areal\t");
             Serial.print(aaReal.x);
             Serial.print("\t");
             Serial.print(aaReal.y);
             Serial.print("\t");
             Serial.println(aaReal.z);
+            }
         #endif
 
         #ifdef OUTPUT_READABLE_WORLDACCEL
@@ -301,12 +320,14 @@ void loop() {
             mpu.dmpGetGravity(&gravity, &q);
             mpu.dmpGetLinearAccel(&aaReal, &aa, &gravity);
             mpu.dmpGetLinearAccelInWorld(&aaWorld, &aaReal, &q);
+            if(serialCom){
             Serial.print("aworld\t");
             Serial.print(aaWorld.x);
             Serial.print("\t");
             Serial.print(aaWorld.y);
             Serial.print("\t");
             Serial.println(aaWorld.z);
+            }
         #endif
     
         #ifdef OUTPUT_TEAPOT
@@ -319,12 +340,12 @@ void loop() {
             teapotPacket[7] = fifoBuffer[9];
             teapotPacket[8] = fifoBuffer[12];
             teapotPacket[9] = fifoBuffer[13];
-            Serial.write(teapotPacket, 14);
+           if(serialCom) Serial.write(teapotPacket, 14);
             teapotPacket[11]++; // packetCount, loops at 0xFF on purpose
         #endif
 
         // blink LED to indicate activity
-        blinkState = !blinkState;
-        digitalWrite(LED_PIN, blinkState);
+        //blinkState = !blinkState;
+        //digitalWrite(LED_PIN, blinkState);
     }
 }
